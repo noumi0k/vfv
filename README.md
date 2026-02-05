@@ -52,12 +52,22 @@ vfv find <query> [path]    # Fuzzy search files/directories
 | Option | Description |
 |--------|-------------|
 | `-d, --dir` | Search directories only |
+| `-e, --exact` | Exact match (no fuzzy) |
 | `-n, --limit <N>` | Maximum results (default: 20) |
 | `-1, --first` | Output only the top result |
 | `-j, --json` | Output as JSON |
 | `-c, --compact` | Compact JSON (single line) |
 | `-t, --timeout <SEC>` | Timeout in seconds (default: 0 = no limit) |
 | `-q, --quiet` | No spinner (for scripts/AI) |
+
+### Path Matching
+
+When query contains `/`, it matches against the full path:
+
+```bash
+vfv find "src/main" ~/dev    # Matches paths containing "src/*/main*"
+vfv find "main" ~/dev        # Matches filename only
+```
 
 ### Examples
 
@@ -67,6 +77,12 @@ vfv find "config" ~/dev
 
 # Find a directory and cd into it
 cd $(vfv find "project" ~/dev -d -1 -q)
+
+# Path search: find "telemo" under any "dev" directory
+vfv find "dev/telemo" ~ -d
+
+# Exact match
+vfv find "config" ~/dev -e
 
 # AI-friendly: quiet, compact JSON, with timeout
 vfv find "main" ~/dev -q -j -c -t 5
@@ -99,8 +115,7 @@ Press `?` to show help screen.
 | `f` + char | Jump to entry starting with char |
 | `;` | Jump to next match |
 | `,` | Jump to previous match |
-| `/` | Search all files |
-| `D` | Search folders only |
+| `/` | Search (with options) |
 | `.` | Toggle hidden files |
 | `r` | Reload |
 | `?` | Show help |
@@ -123,9 +138,18 @@ Press `?` to show help screen.
 
 ### Search
 
+Press `/` to open search. You can use options like CLI:
+
+```
+main.rs        # Fuzzy search
+config -e      # Exact match
+src/main -d    # Directories only, path matching
+telemo -d -e   # Directories only + exact match
+```
+
 | Key | Action |
 |-----|--------|
-| (type) | Enter search query |
+| (type) | Enter query and options |
 | `Enter` | Execute search |
 | `Esc` | Cancel |
 

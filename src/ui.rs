@@ -55,29 +55,52 @@ fn draw_main(frame: &mut Frame, app: &mut App, area: Rect) {
 }
 
 fn draw_search_input(frame: &mut Frame, app: &App, area: Rect) {
-    let title = if app.search_dirs_only {
-        "Search Folders (Enter to search)"
-    } else {
-        "Search All (Enter to search)"
-    };
-
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(title)
+        .title("Search (Enter to search)")
         .border_style(Style::default().fg(Color::Yellow));
 
     let inner_area = block.inner(area);
     frame.render_widget(block, area);
 
-    let hint = if app.search_dirs_only {
-        "Type folder name and press Enter..."
-    } else {
-        "Type file or folder name and press Enter..."
-    };
+    let help_lines = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Usage: ", Style::default().fg(Color::White)),
+            Span::styled("<query> [options]", Style::default().fg(Color::Cyan)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Options:", Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![
+            Span::styled("    -d, --dir    ", Style::default().fg(Color::Yellow)),
+            Span::styled("Directories only", Style::default().fg(Color::DarkGray)),
+        ]),
+        Line::from(vec![
+            Span::styled("    -e, --exact  ", Style::default().fg(Color::Yellow)),
+            Span::styled("Exact match (no fuzzy)", Style::default().fg(Color::DarkGray)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("  Examples:", Style::default().fg(Color::White)),
+        ]),
+        Line::from(vec![
+            Span::styled("    main.rs      ", Style::default().fg(Color::Cyan)),
+            Span::styled("Fuzzy search for main.rs", Style::default().fg(Color::DarkGray)),
+        ]),
+        Line::from(vec![
+            Span::styled("    src/main -d  ", Style::default().fg(Color::Cyan)),
+            Span::styled("Directories containing 'main' under 'src'", Style::default().fg(Color::DarkGray)),
+        ]),
+        Line::from(vec![
+            Span::styled("    config -e    ", Style::default().fg(Color::Cyan)),
+            Span::styled("Exact match for 'config'", Style::default().fg(Color::DarkGray)),
+        ]),
+    ];
 
-    let text = Paragraph::new(hint)
-        .style(Style::default().fg(Color::DarkGray));
-    frame.render_widget(text, inner_area);
+    let paragraph = Paragraph::new(help_lines);
+    frame.render_widget(paragraph, inner_area);
 }
 
 fn draw_searching(frame: &mut Frame, app: &App, area: Rect) {

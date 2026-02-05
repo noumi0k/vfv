@@ -76,6 +76,10 @@ enum Commands {
         /// Compact JSON output (single line)
         #[arg(short = 'c', long = "compact")]
         compact: bool,
+
+        /// Exact match (no fuzzy matching)
+        #[arg(short = 'e', long = "exact")]
+        exact: bool,
     },
 }
 
@@ -93,8 +97,9 @@ fn main() -> io::Result<()> {
             timeout,
             quiet,
             compact,
+            exact,
         }) => {
-            run_find(query, path, json, dir_only, limit, first, timeout, quiet, compact)
+            run_find(query, path, json, dir_only, limit, first, timeout, quiet, compact, exact)
         }
         None => {
             let start_path = cli.path.unwrap_or(std::env::current_dir()?);
@@ -113,6 +118,7 @@ fn run_find(
     timeout: u64,
     quiet: bool,
     compact: bool,
+    exact: bool,
 ) -> io::Result<()> {
     let base_dir = path.unwrap_or(std::env::current_dir()?);
     let actual_limit = if first { 1 } else { limit };
@@ -145,7 +151,7 @@ fn run_find(
 
     thread::spawn(move || {
         let mut searcher = FileSearcher::new();
-        let results = searcher.search(&search_dir, &search_query, actual_limit, dir_only);
+        let results = searcher.search(&search_dir, &search_query, actual_limit, dir_only, exact);
         let _ = tx.send(results);
     });
 
@@ -286,10 +292,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App)
                             app.open_in_editor();
                         }
                         KeyCode::Char('/') => {
-                            app.start_search(false);
-                        }
-                        KeyCode::Char('D') => {
-                            app.start_search(true);  // フォルダのみ検索
+                            app.start_search();
                         }
                         KeyCode::Char('.') => {
                             app.toggle_hidden();

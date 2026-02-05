@@ -23,17 +23,33 @@ impl FileSearcher {
         }
     }
 
-    pub fn search(&mut self, base_dir: &Path, query: &str, max_results: usize, dir_only: bool) -> Vec<SearchResult> {
+    pub fn search(&mut self, base_dir: &Path, query: &str, max_results: usize, dir_only: bool, exact: bool) -> Vec<SearchResult> {
         if query.is_empty() {
             return Vec::new();
         }
 
-        let pattern = Pattern::new(
-            query,
-            CaseMatching::Smart,
-            Normalization::Smart,
-            AtomKind::Fuzzy,
-        );
+        let is_path_query = query.contains('/');
+        let query_lower = query.to_lowercase();
+
+        // クエリの最後のセグメントを取得（パスクエリ用）
+        let query_last_segment = if is_path_query {
+            query.rsplit('/').next().unwrap_or(query)
+        } else {
+            query
+        };
+        let query_last_segment_lower = query_last_segment.to_lowercase();
+
+        // ファジーマッチ用パターン（exactモードでは使わない）
+        let pattern = if !exact {
+            Some(Pattern::new(
+                query,
+                CaseMatching::Smart,
+                Normalization::Smart,
+                AtomKind::Fuzzy,
+            ))
+        } else {
+            None
+        };
 
         let mut results: Vec<SearchResult> = Vec::new();
 
@@ -71,18 +87,48 @@ impl FileSearcher {
                 continue;
             }
 
-            // クエリに/が含まれていればパス全体、なければファイル名のみでマッチ
-            let target = if query.contains('/') { &display_path } else { &file_name };
-            let mut buf = Vec::new();
-            let haystack = Utf32Str::new(target, &mut buf);
+            let file_name_lower = file_name.to_lowercase();
 
-            if let Some(score) = pattern.score(haystack, &mut self.matcher) {
-                results.push(SearchResult {
-                    path: path.to_path_buf(),
-                    display_path,
-                    score,
-                    is_dir,
-                });
+            if exact {
+                // 完全一致モード：ファイル名がクエリと完全一致（大文字小文字無視）
+                let matches = if is_path_query {
+                    // パスクエリの場合：パスにクエリが含まれ、かつファイル名が最後のセグメントと完全一致
+                    let display_path_lower = display_path.to_lowercase();
+                    display_path_lower.contains(&query_lower) && file_name_lower == query_last_segment_lower
+                } else {
+                    // 通常：ファイル名がクエリと完全一致
+                    file_name_lower == query_lower
+                };
+
+                if matches {
+                    results.push(SearchResult {
+                        path: path.to_path_buf(),
+                        display_path,
+                        score: 1000, // 完全一致は固定スコア
+                        is_dir,
+                    });
+                }
+            } else {
+                // ファジーマッチモード
+                let target = if is_path_query { &display_path } else { &file_name };
+                let mut buf = Vec::new();
+                let haystack = Utf32Str::new(target, &mut buf);
+
+                if let Some(ref pat) = pattern {
+                    if let Some(score) = pat.score(haystack, &mut self.matcher) {
+                        // パスクエリの場合、ファイル名がクエリの最後のセグメントを含まないものは除外
+                        if is_path_query && !file_name_lower.contains(&query_last_segment_lower) {
+                            continue;
+                        }
+
+                        results.push(SearchResult {
+                            path: path.to_path_buf(),
+                            display_path,
+                            score,
+                            is_dir,
+                        });
+                    }
+                }
             }
         }
 

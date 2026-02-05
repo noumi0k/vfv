@@ -193,14 +193,14 @@ impl App {
         }
     }
 
-    pub fn start_search(&mut self, dirs_only: bool) {
+    pub fn start_search(&mut self) {
         self.clear_jump();
         self.input_mode = InputMode::SearchInput;
         self.search_input.clear();
         self.search_results.clear();
         self.search_selected = 0;
         self.search_list_state.select(Some(0));
-        self.search_dirs_only = dirs_only;
+        self.search_dirs_only = false;
     }
 
     pub fn cancel_search(&mut self) {
@@ -210,6 +210,23 @@ impl App {
         self.search_dirs_only = false;
     }
 
+    /// 検索入力をパースしてクエリとオプションを分離
+    fn parse_search_input(&self) -> (String, bool, bool) {
+        let mut query_parts: Vec<&str> = Vec::new();
+        let mut exact = false;
+        let mut dirs_only = self.search_dirs_only; // Dキーで開始した場合のデフォルト
+
+        for part in self.search_input.split_whitespace() {
+            match part {
+                "-e" | "--exact" => exact = true,
+                "-d" | "--dir" => dirs_only = true,
+                _ => query_parts.push(part),
+            }
+        }
+
+        (query_parts.join(" "), dirs_only, exact)
+    }
+
     /// 検索を実行（Enter で確定時）- バックグラウンドで実行開始
     pub fn execute_search(&mut self) {
         if self.search_input.is_empty() {
@@ -217,15 +234,21 @@ impl App {
             return;
         }
 
+        // 検索入力をパース
+        let (query, dirs_only, exact) = self.parse_search_input();
+
+        if query.is_empty() {
+            self.cancel_search();
+            return;
+        }
+
         // 検索をバックグラウンドスレッドで実行
         let (tx, rx): (Sender<Vec<SearchResult>>, Receiver<Vec<SearchResult>>) = mpsc::channel();
         let base_dir = self.base_dir.clone();
-        let query = self.search_input.clone();
-        let dirs_only = self.search_dirs_only;
 
         thread::spawn(move || {
             let mut searcher = FileSearcher::new();
-            let results = searcher.search(&base_dir, &query, 100, dirs_only);
+            let results = searcher.search(&base_dir, &query, 100, dirs_only, exact);
             let _ = tx.send(results);
         });
 
