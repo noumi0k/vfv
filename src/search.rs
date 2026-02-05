@@ -23,7 +23,7 @@ impl FileSearcher {
         }
     }
 
-    pub fn search(&mut self, base_dir: &Path, query: &str, max_results: usize) -> Vec<SearchResult> {
+    pub fn search(&mut self, base_dir: &Path, query: &str, max_results: usize, dir_only: bool) -> Vec<SearchResult> {
         if query.is_empty() {
             return Vec::new();
         }
@@ -47,6 +47,12 @@ impl FileSearcher {
 
         for entry in walker.flatten() {
             let path = entry.path();
+            let is_dir = path.is_dir();
+
+            // ディレクトリのみモードの場合、ファイルをスキップ
+            if dir_only && !is_dir {
+                continue;
+            }
 
             // ファイル/ディレクトリ名を取得
             let file_name = match path.file_name() {
@@ -74,7 +80,7 @@ impl FileSearcher {
                     path: path.to_path_buf(),
                     display_path,
                     score,
-                    is_dir: path.is_dir(),
+                    is_dir,
                 });
             }
         }

@@ -35,9 +35,50 @@ cargo install --path .
 ## Usage
 
 ```bash
-vfv              # Browse current directory
-vfv ~/projects   # Browse specific directory
+vfv              # Browse current directory (TUI)
+vfv ~/projects   # Browse specific directory (TUI)
 ```
+
+## CLI Search
+
+Search files directly from the command line. Designed to be called from AI assistants or shell scripts.
+
+```bash
+vfv find <query> [path]    # Fuzzy search files/directories
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `-d, --dir` | Search directories only |
+| `-n, --limit <N>` | Maximum results (default: 20) |
+| `-1, --first` | Output only the top result |
+| `-j, --json` | Output as JSON |
+| `-c, --compact` | Compact JSON (single line) |
+| `-t, --timeout <SEC>` | Timeout in seconds (default: 0 = no limit) |
+| `-q, --quiet` | No spinner (for scripts/AI) |
+
+### Examples
+
+```bash
+# Basic search
+vfv find "config" ~/dev
+
+# Find a directory and cd into it
+cd $(vfv find "project" ~/dev -d -1 -q)
+
+# AI-friendly: quiet, compact JSON, with timeout
+vfv find "main" ~/dev -q -j -c -t 5
+```
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Results found |
+| 1 | No results |
+| 124 | Timeout |
 
 ## Keybindings
 

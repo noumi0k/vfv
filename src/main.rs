@@ -8,28 +8,227 @@ mod ui;
 
 use std::io;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::sync::mpsc;
+use std::thread;
+use std::time::{Duration, Instant};
 
+use clap::{Parser, Subcommand};
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use indicatif::{ProgressBar, ProgressStyle};
 use ratatui::{backend::CrosstermBackend, Terminal};
 
 use app::{App, InputMode};
 use config::Config;
+use search::{FileSearcher, SearchResult};
+
+#[derive(Parser)]
+#[command(name = "vfv")]
+#[command(about = "A fast terminal file viewer with fuzzy search")]
+#[command(version)]
+struct Cli {
+    /// Directory to open (for TUI mode)
+    #[arg(value_name = "PATH")]
+    path: Option<PathBuf>,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Fuzzy search files and directories
+    Find {
+        /// Search query
+        query: String,
+
+        /// Base directory to search in
+        #[arg(value_name = "PATH")]
+        path: Option<PathBuf>,
+
+        /// Output as JSON
+        #[arg(short = 'j', long = "json")]
+        json: bool,
+
+        /// Search directories only
+        #[arg(short = 'd', long = "dir")]
+        dir_only: bool,
+
+        /// Maximum number of results
+        #[arg(short = 'n', long = "limit", default_value = "20")]
+        limit: usize,
+
+        /// Output only the top result (shortcut for -n 1)
+        #[arg(short = '1', long = "first")]
+        first: bool,
+
+        /// Timeout in seconds (0 = no timeout)
+        #[arg(short = 't', long = "timeout", default_value = "0")]
+        timeout: u64,
+
+        /// Quiet mode (no spinner)
+        #[arg(short = 'q', long = "quiet")]
+        quiet: bool,
+
+        /// Compact JSON output (single line)
+        #[arg(short = 'c', long = "compact")]
+        compact: bool,
+    },
+}
 
 fn main() -> io::Result<()> {
-    let args: Vec<String> = std::env::args().collect();
-    let start_path = if args.len() > 1 {
-        PathBuf::from(&args[1])
+    let cli = Cli::parse();
+
+    match cli.command {
+        Some(Commands::Find {
+            query,
+            path,
+            json,
+            dir_only,
+            limit,
+            first,
+            timeout,
+            quiet,
+            compact,
+        }) => {
+            run_find(query, path, json, dir_only, limit, first, timeout, quiet, compact)
+        }
+        None => {
+            let start_path = cli.path.unwrap_or(std::env::current_dir()?);
+            run_tui(&start_path)
+        }
+    }
+}
+
+fn run_find(
+    query: String,
+    path: Option<PathBuf>,
+    json: bool,
+    dir_only: bool,
+    limit: usize,
+    first: bool,
+    timeout: u64,
+    quiet: bool,
+    compact: bool,
+) -> io::Result<()> {
+    let base_dir = path.unwrap_or(std::env::current_dir()?);
+    let actual_limit = if first { 1 } else { limit };
+    let timeout_duration = if timeout > 0 {
+        Some(Duration::from_secs(timeout))
     } else {
-        std::env::current_dir()?
+        None
     };
 
+    // スピナー表示（quiet/jsonモードでは非表示）
+    let show_spinner = !quiet && !json;
+    let spinner = if show_spinner {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .template("{spinner:.cyan} {msg}")
+                .unwrap(),
+        );
+        pb.set_message("Searching...");
+        pb.enable_steady_tick(Duration::from_millis(80));
+        Some(pb)
+    } else {
+        None
+    };
+
+    // 検索をバックグラウンドスレッドで実行
+    let (tx, rx) = mpsc::channel::<Vec<SearchResult>>();
+    let search_query = query.clone();
+    let search_dir = base_dir.clone();
+
+    thread::spawn(move || {
+        let mut searcher = FileSearcher::new();
+        let results = searcher.search(&search_dir, &search_query, actual_limit, dir_only);
+        let _ = tx.send(results);
+    });
+
+    // タイムアウト付きで結果を待つ
+    let start = Instant::now();
+    let results = loop {
+        match rx.try_recv() {
+            Ok(results) => break Some(results),
+            Err(mpsc::TryRecvError::Empty) => {
+                if let Some(timeout_dur) = timeout_duration {
+                    if start.elapsed() >= timeout_dur {
+                        break None;
+                    }
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+            Err(mpsc::TryRecvError::Disconnected) => break Some(Vec::new()),
+        }
+    };
+
+    // スピナー終了
+    if let Some(pb) = spinner {
+        pb.finish_and_clear();
+    }
+
+    // 結果出力
+    match results {
+        Some(results) => {
+            let is_empty = results.is_empty();
+
+            if json {
+                let json_results: Vec<serde_json::Value> = results
+                    .iter()
+                    .map(|r| {
+                        serde_json::json!({
+                            "path": r.path.to_string_lossy(),
+                            "name": r.path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default(),
+                            "is_dir": r.is_dir,
+                            "score": r.score
+                        })
+                    })
+                    .collect();
+
+                if compact {
+                    println!("{}", serde_json::to_string(&json_results).unwrap());
+                } else {
+                    println!("{}", serde_json::to_string_pretty(&json_results).unwrap());
+                }
+            } else {
+                for result in results {
+                    println!("{}", result.path.display());
+                }
+            }
+
+            // 結果が0件の場合は終了コード1
+            if is_empty {
+                std::process::exit(1);
+            }
+        }
+        None => {
+            if json {
+                let error_json = serde_json::json!({
+                    "error": "timeout",
+                    "timeout_seconds": timeout
+                });
+                if compact {
+                    println!("{}", serde_json::to_string(&error_json).unwrap());
+                } else {
+                    println!("{}", serde_json::to_string_pretty(&error_json).unwrap());
+                }
+            } else {
+                eprintln!("Search timed out after {} seconds", timeout);
+            }
+            std::process::exit(124); // タイムアウトの終了コード
+        }
+    }
+
+    Ok(())
+}
+
+fn run_tui(start_path: &PathBuf) -> io::Result<()> {
     let config = Config::load();
-    let mut app = App::new(&start_path, config);
+    let mut app = App::new(start_path, config);
 
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -199,6 +398,15 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App)
                         }
                         _ => {}
                     },
+                    InputMode::Searching => match key.code {
+                        KeyCode::Esc | KeyCode::Char('q') => {
+                            app.cancel_search();
+                        }
+                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            app.cancel_search();
+                        }
+                        _ => {}
+                    },
                     InputMode::SearchResult => match key.code {
                         KeyCode::Enter => {
                             app.confirm_search_result();
@@ -224,6 +432,11 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App)
                     },
                 }
             }
+        }
+
+        // 検索中の場合、結果をポーリング
+        if app.input_mode == InputMode::Searching {
+            app.poll_search();
         }
 
         if app.should_quit {

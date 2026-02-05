@@ -29,6 +29,11 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
             let text = format!("/{}", app.search_input);
             (text, Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
         }
+        InputMode::Searching => {
+            let spinner = app.spinner_char();
+            let text = format!("{} /{}", spinner, app.search_input);
+            (text, Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        }
         _ => {
             let path_str = app.browser.current_dir.to_string_lossy().to_string();
             (path_str, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
@@ -42,6 +47,7 @@ fn draw_main(frame: &mut Frame, app: &mut App, area: Rect) {
     match app.input_mode {
         InputMode::Preview => draw_preview(frame, app, area),
         InputMode::SearchInput => draw_search_input(frame, app, area),
+        InputMode::Searching => draw_searching(frame, app, area),
         InputMode::SearchResult => draw_search_results(frame, app, area),
         InputMode::Help => draw_help(frame, area),
         InputMode::Normal | InputMode::JumpInput => draw_file_list(frame, app, area),
@@ -70,6 +76,24 @@ fn draw_search_input(frame: &mut Frame, app: &App, area: Rect) {
     };
 
     let text = Paragraph::new(hint)
+        .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(text, inner_area);
+}
+
+fn draw_searching(frame: &mut Frame, app: &App, area: Rect) {
+    let spinner = app.spinner_char();
+    let title = format!("{} Searching: {}", spinner, app.search_input);
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(title)
+        .border_style(Style::default().fg(Color::Yellow));
+
+    let inner_area = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mode = if app.search_dirs_only { "folders" } else { "files" };
+    let text = Paragraph::new(format!("Searching {} in {}...", mode, app.base_dir.display()))
         .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(text, inner_area);
 }
@@ -272,6 +296,9 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
         InputMode::SearchInput => {
             "Enter:search  Esc:cancel".to_string()
         }
+        InputMode::Searching => {
+            "Searching...  Esc:cancel".to_string()
+        }
         InputMode::SearchResult => {
             "j/k:select  Enter:open  /:re-search  Esc:cancel".to_string()
         }
@@ -304,7 +331,7 @@ fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
     };
 
     let style = match app.input_mode {
-        InputMode::SearchInput | InputMode::SearchResult => Style::default().fg(Color::Yellow),
+        InputMode::SearchInput | InputMode::SearchResult | InputMode::Searching => Style::default().fg(Color::Yellow),
         InputMode::JumpInput | InputMode::Help => Style::default().fg(Color::Green),
         InputMode::Preview => Style::default().fg(Color::Cyan),
         InputMode::Normal => Style::default().fg(Color::DarkGray),

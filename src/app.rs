@@ -1,4 +1,6 @@
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::thread;
 
 use ratatui::widgets::ListState;
 
@@ -12,6 +14,7 @@ use crate::search::{FileSearcher, SearchResult};
 pub enum InputMode {
     Normal,
     SearchInput,   // 検索文字入力中
+    Searching,     // 検索実行中（スピナー表示）
     SearchResult,  // 検索結果選択中
     Preview,
     JumpInput,     // fキー後の1文字待ち
@@ -39,6 +42,8 @@ pub struct App {
     pub search_list_state: ListState,
     pub base_dir: PathBuf,
     pub search_dirs_only: bool,
+    pub search_receiver: Option<Receiver<Vec<SearchResult>>>,
+    pub spinner_frame: usize,
     // ジャンプ関連
     pub last_jump_char: Option<char>,
 }
@@ -76,6 +81,8 @@ impl App {
             search_list_state,
             base_dir,
             search_dirs_only: false,
+            search_receiver: None,
+            spinner_frame: 0,
             last_jump_char: None,
         };
 
@@ -203,29 +210,68 @@ impl App {
         self.search_dirs_only = false;
     }
 
-    /// 検索を実行（Enter で確定時）
+    /// 検索を実行（Enter で確定時）- バックグラウンドで実行開始
     pub fn execute_search(&mut self) {
         if self.search_input.is_empty() {
             self.cancel_search();
             return;
         }
-        let mut results = self.searcher.search(&self.base_dir, &self.search_input, 100);
 
-        // フォルダのみフィルタ
-        if self.search_dirs_only {
-            results.retain(|r| r.is_dir);
+        // 検索をバックグラウンドスレッドで実行
+        let (tx, rx): (Sender<Vec<SearchResult>>, Receiver<Vec<SearchResult>>) = mpsc::channel();
+        let base_dir = self.base_dir.clone();
+        let query = self.search_input.clone();
+        let dirs_only = self.search_dirs_only;
+
+        thread::spawn(move || {
+            let mut searcher = FileSearcher::new();
+            let results = searcher.search(&base_dir, &query, 100, dirs_only);
+            let _ = tx.send(results);
+        });
+
+        self.search_receiver = Some(rx);
+        self.spinner_frame = 0;
+        self.input_mode = InputMode::Searching;
+    }
+
+    /// 検索結果をポーリング（main loopから呼ばれる）
+    pub fn poll_search(&mut self) -> bool {
+        if let Some(ref rx) = self.search_receiver {
+            match rx.try_recv() {
+                Ok(results) => {
+                    self.search_results = results;
+                    self.search_selected = 0;
+                    self.search_list_state.select(Some(0));
+                    self.search_receiver = None;
+
+                    if self.search_results.is_empty() {
+                        self.status_message = Some("No results found".to_string());
+                        self.input_mode = InputMode::Normal;
+                    } else {
+                        self.input_mode = InputMode::SearchResult;
+                    }
+                    return true;
+                }
+                Err(mpsc::TryRecvError::Empty) => {
+                    // まだ検索中
+                    self.spinner_frame = (self.spinner_frame + 1) % 10;
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    // スレッドが終了（エラー）
+                    self.search_receiver = None;
+                    self.status_message = Some("Search failed".to_string());
+                    self.input_mode = InputMode::Normal;
+                    return true;
+                }
+            }
         }
+        false
+    }
 
-        self.search_results = results;
-        self.search_selected = 0;
-        self.search_list_state.select(Some(0));
-
-        if self.search_results.is_empty() {
-            self.status_message = Some("No results found".to_string());
-            self.input_mode = InputMode::Normal;
-        } else {
-            self.input_mode = InputMode::SearchResult;
-        }
+    /// スピナー文字を取得
+    pub fn spinner_char(&self) -> char {
+        const SPINNER: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+        SPINNER[self.spinner_frame % SPINNER.len()]
     }
 
     /// 検索結果から選択確定
