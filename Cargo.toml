@@ -15,7 +15,7 @@ name = "vfv"
 path = "src/main.rs"
 
 [dependencies]
-ratatui = "0.28"
+ratatui = "0.30"
 crossterm = "0.28"
 syntect = "5"
 toml = "0.8"
