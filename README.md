@@ -7,6 +7,7 @@
 When you're in the flow with AI pair programming, you just want to quickly browse and check files—no complex setup, no heavy features. Just open, search, view, and get back to coding.
 
 [![CI](https://github.com/noumi0k/vive-file-viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/noumi0k/vive-file-viewer/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/vfv)](https://crates.io/crates/vfv)
 ![Rust](https://img.shields.io/badge/rust-1.85%2B-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -27,13 +28,20 @@ You need file management (copy, move, delete), image preview, or plugin ecosyste
 ## Install
 
 ```bash
-# From source
+cargo install vfv
+```
+
+Or download pre-built binary from [Releases](https://github.com/noumi0k/vive-file-viewer/releases).
+
+<details>
+<summary>Build from source</summary>
+
+```bash
 git clone https://github.com/noumi0k/vive-file-viewer.git
 cd vive-file-viewer
 cargo install --path .
-
-# Or download binary from Releases
 ```
+</details>
 
 ## Usage
 

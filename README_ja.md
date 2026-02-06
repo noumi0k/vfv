@@ -5,6 +5,7 @@
 AIとペアプロしてる最中に、ちょっとファイルを確認したいだけ。複雑な設定も重い機能もいらない。開いて、検索して、見て、コーディングに戻る。それだけ。
 
 [![CI](https://github.com/noumi0k/vive-file-viewer/actions/workflows/ci.yml/badge.svg)](https://github.com/noumi0k/vive-file-viewer/actions/workflows/ci.yml)
+[![Crates.io](https://img.shields.io/crates/v/vfv)](https://crates.io/crates/vfv)
 ![Rust](https://img.shields.io/badge/rust-1.85%2B-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -25,13 +26,20 @@ https://github.com/user-attachments/assets/e3ec4515-ac0d-453f-851f-ca449b19e877
 ## インストール
 
 ```bash
-# ソースから
+cargo install vfv
+```
+
+または [Releases](https://github.com/noumi0k/vive-file-viewer/releases) からビルド済みバイナリをダウンロード。
+
+<details>
+<summary>ソースからビルド</summary>
+
+```bash
 git clone https://github.com/noumi0k/vive-file-viewer.git
 cd vive-file-viewer
 cargo install --path .
-
-# またはReleasesからバイナリをダウンロード
 ```
+</details>
 
 ## 使い方
 

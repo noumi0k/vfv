@@ -7,11 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-- TUI search now uses the currently opened directory as the base (not the startup directory)
+## [0.1.1] - 2025-02-06
 
 ### Added
+- Published to [crates.io](https://crates.io/crates/vfv) - now installable via `cargo install vfv`
 - `-b/--base` option in TUI search to specify search base directory
+- Automated release workflow (GitHub Releases + crates.io)
+
+### Changed
+- Package name changed from `vive-file-viewer` to `vfv` for easier installation
+- TUI search now uses the currently opened directory as the base (not the startup directory)
 
 ## [0.1.0] - 2025-02-04
 

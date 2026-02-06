@@ -1,6 +1,6 @@
 [package]
-name = "vive-file-viewer"
-version = "0.1.0"
+name = "vfv"
+version = "0.1.1"
 edition = "2024"
 description = "A fast terminal file viewer with fuzzy search and syntax highlighting"
 authors = ["noumi0k"]
