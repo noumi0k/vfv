@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
-    Frame,
 };
 
 use crate::app::{App, InputMode};
@@ -27,16 +27,31 @@ fn draw_header(frame: &mut Frame, app: &App, area: Rect) {
     let (content, style) = match app.input_mode {
         InputMode::SearchInput | InputMode::SearchResult => {
             let text = format!("/{}", app.search_input);
-            (text, Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            (
+                text,
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
         }
         InputMode::Searching => {
             let spinner = app.spinner_char();
             let text = format!("{} /{}", spinner, app.search_input);
-            (text, Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+            (
+                text,
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            )
         }
         _ => {
             let path_str = app.browser.current_dir.to_string_lossy().to_string();
-            (path_str, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+            (
+                path_str,
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            )
         }
     };
     let header = Paragraph::new(content).style(style);
@@ -54,7 +69,7 @@ fn draw_main(frame: &mut Frame, app: &mut App, area: Rect) {
     }
 }
 
-fn draw_search_input(frame: &mut Frame, app: &App, area: Rect) {
+fn draw_search_input(frame: &mut Frame, _app: &App, area: Rect) {
     let block = Block::default()
         .borders(Borders::ALL)
         .title("Search (Enter to search)")
@@ -70,40 +85,60 @@ fn draw_search_input(frame: &mut Frame, app: &App, area: Rect) {
             Span::styled("<query> [options]", Style::default().fg(Color::Cyan)),
         ]),
         Line::from(""),
-        Line::from(vec![
-            Span::styled("  Options:", Style::default().fg(Color::White)),
-        ]),
+        Line::from(vec![Span::styled(
+            "  Options:",
+            Style::default().fg(Color::White),
+        )]),
         Line::from(vec![
             Span::styled("    -d, --dir    ", Style::default().fg(Color::Yellow)),
             Span::styled("Directories only", Style::default().fg(Color::DarkGray)),
         ]),
         Line::from(vec![
             Span::styled("    -e, --exact  ", Style::default().fg(Color::Yellow)),
-            Span::styled("Exact match (no fuzzy)", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                "Exact match (no fuzzy)",
+                Style::default().fg(Color::DarkGray),
+            ),
         ]),
         Line::from(vec![
             Span::styled("    -b, --base   ", Style::default().fg(Color::Yellow)),
-            Span::styled("Search base directory", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                "Search base directory",
+                Style::default().fg(Color::DarkGray),
+            ),
         ]),
         Line::from(""),
-        Line::from(vec![
-            Span::styled("  Examples:", Style::default().fg(Color::White)),
-        ]),
+        Line::from(vec![Span::styled(
+            "  Examples:",
+            Style::default().fg(Color::White),
+        )]),
         Line::from(vec![
             Span::styled("    main.rs      ", Style::default().fg(Color::Cyan)),
-            Span::styled("Fuzzy search for main.rs", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                "Fuzzy search for main.rs",
+                Style::default().fg(Color::DarkGray),
+            ),
         ]),
         Line::from(vec![
             Span::styled("    src/main -d  ", Style::default().fg(Color::Cyan)),
-            Span::styled("Directories containing 'main' under 'src'", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                "Directories containing 'main' under 'src'",
+                Style::default().fg(Color::DarkGray),
+            ),
         ]),
         Line::from(vec![
             Span::styled("    config -e    ", Style::default().fg(Color::Cyan)),
-            Span::styled("Exact match for 'config'", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                "Exact match for 'config'",
+                Style::default().fg(Color::DarkGray),
+            ),
         ]),
         Line::from(vec![
             Span::styled("    main -b ~/dev", Style::default().fg(Color::Cyan)),
-            Span::styled("Search 'main' under ~/dev", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                "Search 'main' under ~/dev",
+                Style::default().fg(Color::DarkGray),
+            ),
         ]),
     ];
 
@@ -123,9 +158,17 @@ fn draw_searching(frame: &mut Frame, app: &App, area: Rect) {
     let inner_area = block.inner(area);
     frame.render_widget(block, area);
 
-    let mode = if app.search_dirs_only { "folders" } else { "files" };
-    let text = Paragraph::new(format!("Searching {} in {}...", mode, app.base_dir.display()))
-        .style(Style::default().fg(Color::DarkGray));
+    let mode = if app.search_dirs_only {
+        "folders"
+    } else {
+        "files"
+    };
+    let text = Paragraph::new(format!(
+        "Searching {} in {}...",
+        mode,
+        app.base_dir.display()
+    ))
+    .style(Style::default().fg(Color::DarkGray));
     frame.render_widget(text, inner_area);
 }
 
@@ -134,8 +177,7 @@ fn draw_search_results(frame: &mut Frame, app: &mut App, area: Rect) {
         .search_results
         .iter()
         .map(|result| {
-            let icon = if result.is_dir { " " } else { " " };
-            let name = format!("{}{}", icon, result.display_path);
+            let name = format!(" {}", result.display_path);
 
             let style = if result.is_dir {
                 Style::default().fg(Color::Yellow)
@@ -147,8 +189,17 @@ fn draw_search_results(frame: &mut Frame, app: &mut App, area: Rect) {
         })
         .collect();
 
-    let mode = if app.search_dirs_only { "Folders" } else { "All" };
-    let title = format!("{}: {} ({} results)", mode, app.search_input, app.search_results.len());
+    let mode = if app.search_dirs_only {
+        "Folders"
+    } else {
+        "All"
+    };
+    let title = format!(
+        "{}: {} ({} results)",
+        mode,
+        app.search_input,
+        app.search_results.len()
+    );
 
     let list = List::new(items)
         .block(
@@ -173,8 +224,7 @@ fn draw_file_list(frame: &mut Frame, app: &mut App, area: Rect) {
         .entries
         .iter()
         .map(|entry| {
-            let icon = if entry.is_dir { " " } else { " " };
-            let name = format!("{}{}", icon, entry.name);
+            let name = format!(" {}", entry.name);
 
             let style = if entry.is_dir {
                 Style::default().fg(Color::Yellow)
@@ -263,12 +313,11 @@ fn draw_preview(frame: &mut Frame, app: &mut App, area: Rect) {
 
         let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
         frame.render_widget(paragraph, inner_area);
-    } else if let Some(entry) = app.browser.selected_entry() {
-        if entry.is_dir {
-            let text = Paragraph::new("[Directory]")
-                .style(Style::default().fg(Color::DarkGray));
-            frame.render_widget(text, inner_area);
-        }
+    } else if let Some(entry) = app.browser.selected_entry()
+        && entry.is_dir
+    {
+        let text = Paragraph::new("[Directory]").style(Style::default().fg(Color::DarkGray));
+        frame.render_widget(text, inner_area);
     }
 }
 
@@ -305,10 +354,7 @@ fn draw_help(frame: &mut Frame, area: Rect) {
         "  Press q or ? to close",
     ];
 
-    let lines: Vec<Line> = help_text
-        .iter()
-        .map(|&s| Line::from(s))
-        .collect();
+    let lines: Vec<Line> = help_text.iter().map(|&s| Line::from(s)).collect();
 
     let block = Block::default()
         .borders(Borders::ALL)
@@ -324,45 +370,45 @@ fn draw_help(frame: &mut Frame, area: Rect) {
 
 fn draw_footer(frame: &mut Frame, app: &App, area: Rect) {
     let content = match app.input_mode {
-        InputMode::SearchInput => {
-            "Enter:search  Esc:cancel".to_string()
-        }
-        InputMode::Searching => {
-            "Searching...  Esc:cancel".to_string()
-        }
-        InputMode::SearchResult => {
-            "j/k:select  Enter:open  /:re-search  Esc:cancel".to_string()
-        }
-        InputMode::JumpInput => {
-            "Type a character to jump...".to_string()
-        }
+        InputMode::SearchInput => "Enter:search  Esc:cancel".to_string(),
+        InputMode::Searching => "Searching...  Esc:cancel".to_string(),
+        InputMode::SearchResult => "j/k:select  Enter:open  /:re-search  Esc:cancel".to_string(),
+        InputMode::JumpInput => "Type a character to jump...".to_string(),
         InputMode::Normal => {
             if let Some(ref msg) = app.status_message {
                 msg.clone()
             } else {
-                let is_file = app.browser.selected_entry().map(|e| !e.is_dir).unwrap_or(false);
+                let is_file = app
+                    .browser
+                    .selected_entry()
+                    .map(|e| !e.is_dir)
+                    .unwrap_or(false);
                 let jump_hint = if let Some(c) = app.last_jump_char {
                     format!("  ;/,:next/prev '{}'", c)
                 } else {
                     String::new()
                 };
                 if is_file {
-                    format!("q:quit  j/k:move  f:jump{}  Enter:open  e:editor  /:search", jump_hint)
+                    format!(
+                        "q:quit  j/k:move  f:jump{}  Enter:open  e:editor  /:search",
+                        jump_hint
+                    )
                 } else {
-                    format!("q:quit  j/k:move  f:jump{}  Enter:open  /:search", jump_hint)
+                    format!(
+                        "q:quit  j/k:move  f:jump{}  Enter:open  /:search",
+                        jump_hint
+                    )
                 }
             }
         }
-        InputMode::Preview => {
-            "j/k:scroll  g/G:top/bottom  e:editor  h/q:back".to_string()
-        }
-        InputMode::Help => {
-            "Press q or ? to close".to_string()
-        }
+        InputMode::Preview => "j/k:scroll  g/G:top/bottom  e:editor  h/q:back".to_string(),
+        InputMode::Help => "Press q or ? to close".to_string(),
     };
 
     let style = match app.input_mode {
-        InputMode::SearchInput | InputMode::SearchResult | InputMode::Searching => Style::default().fg(Color::Yellow),
+        InputMode::SearchInput | InputMode::SearchResult | InputMode::Searching => {
+            Style::default().fg(Color::Yellow)
+        }
         InputMode::JumpInput | InputMode::Help => Style::default().fg(Color::Green),
         InputMode::Preview => Style::default().fg(Color::Cyan),
         InputMode::Normal => Style::default().fg(Color::DarkGray),

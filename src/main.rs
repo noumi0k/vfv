@@ -7,7 +7,7 @@ mod search;
 mod ui;
 
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -16,10 +16,10 @@ use clap::{Parser, Subcommand};
 use crossterm::{
     event::{self, Event, KeyCode, KeyModifiers},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use indicatif::{ProgressBar, ProgressStyle};
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 
 use app::{App, InputMode};
 use config::Config;
@@ -98,9 +98,9 @@ fn main() -> io::Result<()> {
             quiet,
             compact,
             exact,
-        }) => {
-            run_find(query, path, json, dir_only, limit, first, timeout, quiet, compact, exact)
-        }
+        }) => run_find(
+            query, path, json, dir_only, limit, first, timeout, quiet, compact, exact,
+        ),
         None => {
             let start_path = cli.path.unwrap_or(std::env::current_dir()?);
             run_tui(&start_path)
@@ -108,6 +108,7 @@ fn main() -> io::Result<()> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_find(
     query: String,
     path: Option<PathBuf>,
@@ -161,10 +162,10 @@ fn run_find(
         match rx.try_recv() {
             Ok(results) => break Some(results),
             Err(mpsc::TryRecvError::Empty) => {
-                if let Some(timeout_dur) = timeout_duration {
-                    if start.elapsed() >= timeout_dur {
-                        break None;
-                    }
+                if let Some(timeout_dur) = timeout_duration
+                    && start.elapsed() >= timeout_dur
+                {
+                    break None;
                 }
                 thread::sleep(Duration::from_millis(50));
             }
@@ -232,7 +233,7 @@ fn run_find(
     Ok(())
 }
 
-fn run_tui(start_path: &PathBuf) -> io::Result<()> {
+fn run_tui(start_path: &Path) -> io::Result<()> {
     let config = Config::load();
     let mut app = App::new(start_path, config);
 
@@ -261,179 +262,180 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>, app: &mut App)
 
         terminal.draw(|f| ui::draw(f, app))?;
 
-        if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                app.status_message = None;
+        if event::poll(Duration::from_millis(100))?
+            && let Event::Key(key) = event::read()?
+        {
+            app.status_message = None;
 
-                match app.input_mode {
-                    InputMode::Normal => match key.code {
-                        KeyCode::Char('q') => {
-                            app.quit();
+            match app.input_mode {
+                InputMode::Normal => match key.code {
+                    KeyCode::Char('q') => {
+                        app.quit();
+                    }
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        app.move_down();
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        app.move_up();
+                    }
+                    KeyCode::Char('l') | KeyCode::Enter | KeyCode::Right => {
+                        app.enter();
+                    }
+                    KeyCode::Char('h') | KeyCode::Backspace | KeyCode::Left => {
+                        app.go_parent();
+                    }
+                    KeyCode::Char('g') => {
+                        app.go_to_top();
+                    }
+                    KeyCode::Char('G') => {
+                        app.go_to_bottom();
+                    }
+                    KeyCode::Char('e') => {
+                        app.open_in_editor();
+                    }
+                    KeyCode::Char('/') => {
+                        app.start_search();
+                    }
+                    KeyCode::Char('.') => {
+                        app.toggle_hidden();
+                    }
+                    KeyCode::Char('r') => {
+                        app.reload();
+                    }
+                    KeyCode::Char('y') => {
+                        app.copy_path();
+                    }
+                    KeyCode::Char('f') => {
+                        app.start_jump();
+                    }
+                    KeyCode::Char(';') => {
+                        app.jump_next();
+                    }
+                    KeyCode::Char(',') => {
+                        app.jump_prev();
+                    }
+                    KeyCode::Char('?') => {
+                        app.show_help();
+                    }
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        app.quit();
+                    }
+                    _ => {}
+                },
+                InputMode::Help => match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
+                        app.close_help();
+                    }
+                    _ => {}
+                },
+                InputMode::JumpInput => match key.code {
+                    KeyCode::Char(c) => {
+                        app.execute_jump(c);
+                    }
+                    KeyCode::Esc => {
+                        app.cancel_jump();
+                    }
+                    _ => {
+                        app.cancel_jump();
+                    }
+                },
+                InputMode::Preview => match key.code {
+                    KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('h') | KeyCode::Left => {
+                        app.exit_preview();
+                    }
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        app.scroll_preview_down(1);
+                    }
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        app.scroll_preview_up(1);
+                    }
+                    KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        let half = app.preview_height / 2;
+                        app.scroll_preview_down(half.max(1));
+                    }
+                    KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        let half = app.preview_height / 2;
+                        app.scroll_preview_up(half.max(1));
+                    }
+                    KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        app.scroll_preview_down(app.preview_height.saturating_sub(2));
+                    }
+                    KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        app.scroll_preview_up(app.preview_height.saturating_sub(2));
+                    }
+                    KeyCode::PageUp => {
+                        app.scroll_preview_up(app.preview_height.saturating_sub(2));
+                    }
+                    KeyCode::PageDown => {
+                        app.scroll_preview_down(app.preview_height.saturating_sub(2));
+                    }
+                    KeyCode::Char('g') => {
+                        app.preview_scroll = 0;
+                    }
+                    KeyCode::Char('G') => {
+                        if let Some(ref content) = app.preview_content {
+                            app.preview_scroll =
+                                content.lines.len().saturating_sub(app.preview_height);
                         }
-                        KeyCode::Char('j') | KeyCode::Down => {
-                            app.move_down();
-                        }
-                        KeyCode::Char('k') | KeyCode::Up => {
-                            app.move_up();
-                        }
-                        KeyCode::Char('l') | KeyCode::Enter | KeyCode::Right => {
-                            app.enter();
-                        }
-                        KeyCode::Char('h') | KeyCode::Backspace | KeyCode::Left => {
-                            app.go_parent();
-                        }
-                        KeyCode::Char('g') => {
-                            app.go_to_top();
-                        }
-                        KeyCode::Char('G') => {
-                            app.go_to_bottom();
-                        }
-                        KeyCode::Char('e') => {
-                            app.open_in_editor();
-                        }
-                        KeyCode::Char('/') => {
-                            app.start_search();
-                        }
-                        KeyCode::Char('.') => {
-                            app.toggle_hidden();
-                        }
-                        KeyCode::Char('r') => {
-                            app.reload();
-                        }
-                        KeyCode::Char('y') => {
-                            app.copy_path();
-                        }
-                        KeyCode::Char('f') => {
-                            app.start_jump();
-                        }
-                        KeyCode::Char(';') => {
-                            app.jump_next();
-                        }
-                        KeyCode::Char(',') => {
-                            app.jump_prev();
-                        }
-                        KeyCode::Char('?') => {
-                            app.show_help();
-                        }
-                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            app.quit();
-                        }
-                        _ => {}
-                    },
-                    InputMode::Help => match key.code {
-                        KeyCode::Esc | KeyCode::Char('q') | KeyCode::Char('?') => {
-                            app.close_help();
-                        }
-                        _ => {}
-                    },
-                    InputMode::JumpInput => match key.code {
-                        KeyCode::Char(c) => {
-                            app.execute_jump(c);
-                        }
-                        KeyCode::Esc => {
-                            app.cancel_jump();
-                        }
-                        _ => {
-                            app.cancel_jump();
-                        }
-                    },
-                    InputMode::Preview => match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc | KeyCode::Char('h') | KeyCode::Left => {
-                            app.exit_preview();
-                        }
-                        KeyCode::Char('j') | KeyCode::Down => {
-                            app.scroll_preview_down(1);
-                        }
-                        KeyCode::Char('k') | KeyCode::Up => {
-                            app.scroll_preview_up(1);
-                        }
-                        KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            let half = app.preview_height / 2;
-                            app.scroll_preview_down(half.max(1));
-                        }
-                        KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            let half = app.preview_height / 2;
-                            app.scroll_preview_up(half.max(1));
-                        }
-                        KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            app.scroll_preview_down(app.preview_height.saturating_sub(2));
-                        }
-                        KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            app.scroll_preview_up(app.preview_height.saturating_sub(2));
-                        }
-                        KeyCode::PageUp => {
-                            app.scroll_preview_up(app.preview_height.saturating_sub(2));
-                        }
-                        KeyCode::PageDown => {
-                            app.scroll_preview_down(app.preview_height.saturating_sub(2));
-                        }
-                        KeyCode::Char('g') => {
-                            app.preview_scroll = 0;
-                        }
-                        KeyCode::Char('G') => {
-                            if let Some(ref content) = app.preview_content {
-                                app.preview_scroll = content.lines.len().saturating_sub(app.preview_height);
-                            }
-                        }
-                        KeyCode::Char('e') => {
-                            app.open_in_editor();
-                        }
-                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            app.quit();
-                        }
-                        _ => {}
-                    },
-                    InputMode::SearchInput => match key.code {
-                        KeyCode::Enter => {
-                            app.execute_search();
-                        }
-                        KeyCode::Esc => {
-                            app.cancel_search();
-                        }
-                        KeyCode::Backspace => {
-                            app.search_input_backspace();
-                        }
-                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            app.cancel_search();
-                        }
-                        KeyCode::Char(c) => {
-                            app.search_input_char(c);
-                        }
-                        _ => {}
-                    },
-                    InputMode::Searching => match key.code {
-                        KeyCode::Esc | KeyCode::Char('q') => {
-                            app.cancel_search();
-                        }
-                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            app.cancel_search();
-                        }
-                        _ => {}
-                    },
-                    InputMode::SearchResult => match key.code {
-                        KeyCode::Enter => {
-                            app.confirm_search_result();
-                        }
-                        KeyCode::Esc | KeyCode::Char('q') => {
-                            app.cancel_search();
-                        }
-                        KeyCode::Up | KeyCode::Char('k') | KeyCode::BackTab => {
-                            app.search_move_up();
-                        }
-                        KeyCode::Down | KeyCode::Char('j') | KeyCode::Tab => {
-                            app.search_move_down();
-                        }
-                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            app.cancel_search();
-                        }
-                        KeyCode::Char('/') => {
-                            // 再検索（モードは維持）
-                            app.search_input.clear();
-                            app.input_mode = InputMode::SearchInput;
-                        }
-                        _ => {}
-                    },
-                }
+                    }
+                    KeyCode::Char('e') => {
+                        app.open_in_editor();
+                    }
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        app.quit();
+                    }
+                    _ => {}
+                },
+                InputMode::SearchInput => match key.code {
+                    KeyCode::Enter => {
+                        app.execute_search();
+                    }
+                    KeyCode::Esc => {
+                        app.cancel_search();
+                    }
+                    KeyCode::Backspace => {
+                        app.search_input_backspace();
+                    }
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        app.cancel_search();
+                    }
+                    KeyCode::Char(c) => {
+                        app.search_input_char(c);
+                    }
+                    _ => {}
+                },
+                InputMode::Searching => match key.code {
+                    KeyCode::Esc | KeyCode::Char('q') => {
+                        app.cancel_search();
+                    }
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        app.cancel_search();
+                    }
+                    _ => {}
+                },
+                InputMode::SearchResult => match key.code {
+                    KeyCode::Enter => {
+                        app.confirm_search_result();
+                    }
+                    KeyCode::Esc | KeyCode::Char('q') => {
+                        app.cancel_search();
+                    }
+                    KeyCode::Up | KeyCode::Char('k') | KeyCode::BackTab => {
+                        app.search_move_up();
+                    }
+                    KeyCode::Down | KeyCode::Char('j') | KeyCode::Tab => {
+                        app.search_move_down();
+                    }
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        app.cancel_search();
+                    }
+                    KeyCode::Char('/') => {
+                        // 再検索（モードは維持）
+                        app.search_input.clear();
+                        app.input_mode = InputMode::SearchInput;
+                    }
+                    _ => {}
+                },
             }
         }
 

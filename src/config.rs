@@ -83,3 +83,53 @@ impl Config {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config() {
+        let config = Config::default();
+        assert_eq!(config.editor, "vim");
+        assert!(config.editor_args.is_empty());
+        assert!(!config.show_hidden);
+        assert_eq!(config.preview_max_lines, 1000);
+        assert_eq!(config.theme, "base16-ocean.dark");
+    }
+
+    #[test]
+    fn test_parse_config_from_toml() {
+        let toml_str = r#"
+            editor = "nvim"
+            editor_args = ["-c", "startinsert"]
+            show_hidden = true
+            preview_max_lines = 500
+            theme = "Solarized (dark)"
+        "#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.editor, "nvim");
+        assert_eq!(config.editor_args, vec!["-c", "startinsert"]);
+        assert!(config.show_hidden);
+        assert_eq!(config.preview_max_lines, 500);
+        assert_eq!(config.theme, "Solarized (dark)");
+    }
+
+    #[test]
+    fn test_parse_partial_config() {
+        let toml_str = r#"
+            editor = "code"
+        "#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.editor, "code");
+        // Other fields should have defaults
+        assert!(!config.show_hidden);
+        assert_eq!(config.preview_max_lines, 1000);
+    }
+
+    #[test]
+    fn test_config_path_is_not_empty() {
+        let path = Config::config_path();
+        assert!(!path.as_os_str().is_empty());
+    }
+}

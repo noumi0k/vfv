@@ -13,12 +13,12 @@ use crate::search::{FileSearcher, SearchResult};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InputMode {
     Normal,
-    SearchInput,   // 検索文字入力中
-    Searching,     // 検索実行中（スピナー表示）
-    SearchResult,  // 検索結果選択中
+    SearchInput,  // 検索文字入力中
+    Searching,    // 検索実行中（スピナー表示）
+    SearchResult, // 検索結果選択中
     Preview,
-    JumpInput,     // fキー後の1文字待ち
-    Help,          // ヘルプ画面
+    JumpInput, // fキー後の1文字待ち
+    Help,      // ヘルプ画面
 }
 
 pub struct App {
@@ -36,7 +36,6 @@ pub struct App {
     pub list_state: ListState,
     pub needs_redraw: bool,
     // 検索関連
-    pub searcher: FileSearcher,
     pub search_results: Vec<SearchResult>,
     pub search_selected: usize,
     pub search_list_state: ListState,
@@ -53,7 +52,9 @@ impl App {
         let previewer = Previewer::new(&config.theme, config.preview_max_lines);
         let editor = Editor::new(&config);
         let browser = FileBrowser::new(start_path, config.show_hidden);
-        let base_dir = start_path.canonicalize().unwrap_or_else(|_| start_path.to_path_buf());
+        let base_dir = start_path
+            .canonicalize()
+            .unwrap_or_else(|_| start_path.to_path_buf());
 
         let mut list_state = ListState::default();
         list_state.select(Some(0));
@@ -75,7 +76,6 @@ impl App {
             should_quit: false,
             list_state,
             needs_redraw: false,
-            searcher: FileSearcher::new(),
             search_results: Vec::new(),
             search_selected: 0,
             search_list_state,
@@ -178,16 +178,16 @@ impl App {
     }
 
     pub fn open_in_editor(&mut self) {
-        if let Some(entry) = self.browser.selected_entry() {
-            if !entry.is_dir {
-                match self.editor.open(&entry.path) {
-                    Ok(_) => {
-                        self.needs_redraw = true;
-                    }
-                    Err(e) => {
-                        self.status_message = Some(e);
-                        self.needs_redraw = true;
-                    }
+        if let Some(entry) = self.browser.selected_entry()
+            && !entry.is_dir
+        {
+            match self.editor.open(&entry.path) {
+                Ok(_) => {
+                    self.needs_redraw = true;
+                }
+                Err(e) => {
+                    self.status_message = Some(e);
+                    self.needs_redraw = true;
                 }
             }
         }
@@ -228,9 +228,9 @@ impl App {
                     if i + 1 < parts.len() {
                         i += 1;
                         let path_str = parts[i];
-                        let expanded = if path_str.starts_with("~/") {
+                        let expanded = if let Some(stripped) = path_str.strip_prefix("~/") {
                             if let Ok(home) = std::env::var("HOME") {
-                                PathBuf::from(home).join(&path_str[2..])
+                                PathBuf::from(home).join(stripped)
                             } else {
                                 PathBuf::from(path_str)
                             }
@@ -343,7 +343,8 @@ impl App {
                     self.browser = FileBrowser::new(parent, self.config.show_hidden);
                     if let Some(file_name) = path.file_name() {
                         let name = file_name.to_string_lossy().to_string();
-                        if let Some(idx) = self.browser.entries.iter().position(|e| e.name == name) {
+                        if let Some(idx) = self.browser.entries.iter().position(|e| e.name == name)
+                        {
                             self.browser.selected_index = idx;
                             self.list_state.select(Some(idx));
                         }

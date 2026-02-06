@@ -23,7 +23,14 @@ impl FileSearcher {
         }
     }
 
-    pub fn search(&mut self, base_dir: &Path, query: &str, max_results: usize, dir_only: bool, exact: bool) -> Vec<SearchResult> {
+    pub fn search(
+        &mut self,
+        base_dir: &Path,
+        query: &str,
+        max_results: usize,
+        dir_only: bool,
+        exact: bool,
+    ) -> Vec<SearchResult> {
         if query.is_empty() {
             return Vec::new();
         }
@@ -94,7 +101,8 @@ impl FileSearcher {
                 let matches = if is_path_query {
                     // パスクエリの場合：パスにクエリが含まれ、かつファイル名が最後のセグメントと完全一致
                     let display_path_lower = display_path.to_lowercase();
-                    display_path_lower.contains(&query_lower) && file_name_lower == query_last_segment_lower
+                    display_path_lower.contains(&query_lower)
+                        && file_name_lower == query_last_segment_lower
                 } else {
                     // 通常：ファイル名がクエリと完全一致
                     file_name_lower == query_lower
@@ -110,24 +118,28 @@ impl FileSearcher {
                 }
             } else {
                 // ファジーマッチモード
-                let target = if is_path_query { &display_path } else { &file_name };
+                let target = if is_path_query {
+                    &display_path
+                } else {
+                    &file_name
+                };
                 let mut buf = Vec::new();
                 let haystack = Utf32Str::new(target, &mut buf);
 
-                if let Some(ref pat) = pattern {
-                    if let Some(score) = pat.score(haystack, &mut self.matcher) {
-                        // パスクエリの場合、ファイル名がクエリの最後のセグメントを含まないものは除外
-                        if is_path_query && !file_name_lower.contains(&query_last_segment_lower) {
-                            continue;
-                        }
-
-                        results.push(SearchResult {
-                            path: path.to_path_buf(),
-                            display_path,
-                            score,
-                            is_dir,
-                        });
+                if let Some(ref pat) = pattern
+                    && let Some(score) = pat.score(haystack, &mut self.matcher)
+                {
+                    // パスクエリの場合、ファイル名がクエリの最後のセグメントを含まないものは除外
+                    if is_path_query && !file_name_lower.contains(&query_last_segment_lower) {
+                        continue;
                     }
+
+                    results.push(SearchResult {
+                        path: path.to_path_buf(),
+                        display_path,
+                        score,
+                        is_dir,
+                    });
                 }
             }
         }
@@ -136,5 +148,100 @@ impl FileSearcher {
         results.sort_by(|a, b| b.score.cmp(&a.score));
         results.truncate(max_results);
         results
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::{self, File};
+    use tempfile::TempDir;
+
+    fn setup_test_dir() -> TempDir {
+        let temp_dir = TempDir::new().unwrap();
+        let base = temp_dir.path();
+
+        // Create test structure
+        fs::create_dir_all(base.join("src")).unwrap();
+        fs::create_dir_all(base.join("tests")).unwrap();
+        fs::create_dir_all(base.join("docs/api")).unwrap();
+
+        File::create(base.join("src/main.rs")).unwrap();
+        File::create(base.join("src/lib.rs")).unwrap();
+        File::create(base.join("src/config.rs")).unwrap();
+        File::create(base.join("tests/test_main.rs")).unwrap();
+        File::create(base.join("docs/api/readme.md")).unwrap();
+        File::create(base.join("README.md")).unwrap();
+
+        temp_dir
+    }
+
+    #[test]
+    fn test_empty_query_returns_empty() {
+        let temp_dir = setup_test_dir();
+        let mut searcher = FileSearcher::new();
+        let results = searcher.search(temp_dir.path(), "", 10, false, false);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_fuzzy_search_finds_files() {
+        let temp_dir = setup_test_dir();
+        let mut searcher = FileSearcher::new();
+        let results = searcher.search(temp_dir.path(), "main", 10, false, false);
+        assert!(!results.is_empty());
+        assert!(results.iter().any(|r| r.display_path.contains("main")));
+    }
+
+    #[test]
+    fn test_exact_match() {
+        let temp_dir = setup_test_dir();
+        let mut searcher = FileSearcher::new();
+        let results = searcher.search(temp_dir.path(), "main.rs", 10, false, true);
+        assert!(!results.is_empty());
+        assert!(
+            results
+                .iter()
+                .all(|r| r.path.file_name().unwrap() == "main.rs")
+        );
+    }
+
+    #[test]
+    fn test_dir_only_mode() {
+        let temp_dir = setup_test_dir();
+        let mut searcher = FileSearcher::new();
+        let results = searcher.search(temp_dir.path(), "src", 10, true, false);
+        assert!(results.iter().all(|r| r.is_dir));
+    }
+
+    #[test]
+    fn test_path_query() {
+        let temp_dir = setup_test_dir();
+        let mut searcher = FileSearcher::new();
+        let results = searcher.search(temp_dir.path(), "src/main", 10, false, false);
+        assert!(!results.is_empty());
+        assert!(
+            results
+                .iter()
+                .any(|r| r.display_path.contains("src") && r.display_path.contains("main"))
+        );
+    }
+
+    #[test]
+    fn test_max_results_limit() {
+        let temp_dir = setup_test_dir();
+        let mut searcher = FileSearcher::new();
+        let results = searcher.search(temp_dir.path(), "r", 2, false, false);
+        assert!(results.len() <= 2);
+    }
+
+    #[test]
+    fn test_results_sorted_by_score() {
+        let temp_dir = setup_test_dir();
+        let mut searcher = FileSearcher::new();
+        let results = searcher.search(temp_dir.path(), "main", 10, false, false);
+        for i in 1..results.len() {
+            assert!(results[i - 1].score >= results[i].score);
+        }
     }
 }

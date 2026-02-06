@@ -48,20 +48,18 @@ impl FileBrowser {
 
         if let Ok(read_dir) = fs::read_dir(&self.current_dir) {
             for entry in read_dir.flatten() {
-                if let Some(file_entry) = FileEntry::new(entry.path()) {
-                    if self.show_hidden || !file_entry.name.starts_with('.') {
-                        self.entries.push(file_entry);
-                    }
+                if let Some(file_entry) = FileEntry::new(entry.path())
+                    && (self.show_hidden || !file_entry.name.starts_with('.'))
+                {
+                    self.entries.push(file_entry);
                 }
             }
         }
 
-        self.entries.sort_by(|a, b| {
-            match (a.is_dir, b.is_dir) {
-                (true, false) => Ordering::Less,
-                (false, true) => Ordering::Greater,
-                _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-            }
+        self.entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+            (true, false) => Ordering::Less,
+            (false, true) => Ordering::Greater,
+            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
         });
 
         if self.selected_index >= self.entries.len() {
@@ -104,28 +102,31 @@ impl FileBrowser {
     }
 
     pub fn enter_directory(&mut self) -> bool {
-        if let Some(entry) = self.selected_entry() {
-            if entry.is_dir {
-                self.current_dir = entry.path.clone();
-                self.selected_index = 0;
-                self.refresh();
-                return true;
-            }
+        if let Some(entry) = self.selected_entry()
+            && entry.is_dir
+        {
+            self.current_dir = entry.path.clone();
+            self.selected_index = 0;
+            self.refresh();
+            return true;
         }
         false
     }
 
     pub fn go_parent(&mut self) -> bool {
         if let Some(parent) = self.current_dir.parent() {
-            let old_dir_name = self.current_dir.file_name().map(|n| n.to_string_lossy().to_string());
+            let old_dir_name = self
+                .current_dir
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string());
             self.current_dir = parent.to_path_buf();
             self.selected_index = 0;
             self.refresh();
 
-            if let Some(old_name) = old_dir_name {
-                if let Some(idx) = self.entries.iter().position(|e| e.name == old_name) {
-                    self.selected_index = idx;
-                }
+            if let Some(old_name) = old_dir_name
+                && let Some(idx) = self.entries.iter().position(|e| e.name == old_name)
+            {
+                self.selected_index = idx;
             }
             return true;
         }

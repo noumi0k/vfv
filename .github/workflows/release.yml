@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: vfv
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: vfv
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: vfv
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: vfv.exe
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+      - name: Package (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar -czvf vfv-${{ matrix.target }}.tar.gz ${{ matrix.artifact }}
+          mv vfv-${{ matrix.target }}.tar.gz ../../../
+      - name: Package (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a vfv-${{ matrix.target }}.zip ${{ matrix.artifact }}
+          mv vfv-${{ matrix.target }}.zip ../../../
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vfv-${{ matrix.target }}
+          path: vfv-${{ matrix.target }}.*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true

@@ -25,7 +25,7 @@ You need file management (copy, move, delete), image preview, or plugin ecosyste
 
 ```bash
 # From source
-git clone https://github.com/yourname/vive-file-viewer.git
+git clone https://github.com/noumi0k/vive-file-viewer.git
 cd vive-file-viewer
 cargo install --path .
 
