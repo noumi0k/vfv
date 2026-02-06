@@ -215,7 +215,7 @@ impl App {
     fn parse_search_input(&self) -> (String, bool, bool, Option<PathBuf>) {
         let mut query_parts: Vec<&str> = Vec::new();
         let mut exact = false;
-        let mut dirs_only = self.search_dirs_only; // Dキーで開始した場合のデフォルト
+        let mut dirs_only = false;
         let mut base_path: Option<PathBuf> = None;
 
         let parts: Vec<&str> = self.search_input.split_whitespace().collect();
@@ -269,13 +269,17 @@ impl App {
             return;
         }
 
+        // UI表示用に状態を更新
+        self.search_dirs_only = dirs_only;
+        self.base_dir = base_path.unwrap_or_else(|| self.browser.current_dir.clone());
+
         // 検索をバックグラウンドスレッドで実行
         let (tx, rx): (Sender<Vec<SearchResult>>, Receiver<Vec<SearchResult>>) = mpsc::channel();
-        let base_dir = base_path.unwrap_or_else(|| self.browser.current_dir.clone());
+        let search_base = self.base_dir.clone();
 
         thread::spawn(move || {
             let mut searcher = FileSearcher::new();
-            let results = searcher.search(&base_dir, &query, 100, dirs_only, exact);
+            let results = searcher.search(&search_base, &query, 100, dirs_only, exact);
             let _ = tx.send(results);
         });
 
@@ -334,13 +338,20 @@ impl App {
             self.search_input.clear();
             self.search_results.clear();
 
+            // 隠しファイル/ディレクトリの場合は表示を有効にする
+            let is_hidden = path
+                .file_name()
+                .map(|n| n.to_string_lossy().starts_with('.'))
+                .unwrap_or(false);
+            let show_hidden = self.config.show_hidden || is_hidden;
+
             if is_dir {
-                self.browser = FileBrowser::new(&path, self.config.show_hidden);
+                self.browser = FileBrowser::new(&path, show_hidden);
                 self.list_state.select(Some(0));
                 self.update_preview();
             } else {
                 if let Some(parent) = path.parent() {
-                    self.browser = FileBrowser::new(parent, self.config.show_hidden);
+                    self.browser = FileBrowser::new(parent, show_hidden);
                     if let Some(file_name) = path.file_name() {
                         let name = file_name.to_string_lossy().to_string();
                         if let Some(idx) = self.browser.entries.iter().position(|e| e.name == name)
@@ -359,7 +370,10 @@ impl App {
     }
 
     pub fn search_input_char(&mut self, c: char) {
-        self.search_input.push(c);
+        // Limit query length to prevent pathological input (same as CLI: 1000 chars)
+        if self.search_input.len() < 1000 {
+            self.search_input.push(c);
+        }
     }
 
     pub fn search_input_backspace(&mut self) {
@@ -439,10 +453,16 @@ impl App {
                 });
 
             #[cfg(target_os = "windows")]
-            let result = std::process::Command::new("cmd")
-                .args(["/C", &format!("echo {} | clip", path_str)])
+            let result = std::process::Command::new("clip")
+                .stdin(std::process::Stdio::piped())
                 .spawn()
-                .and_then(|mut child| child.wait());
+                .and_then(|mut child| {
+                    use std::io::Write;
+                    if let Some(stdin) = child.stdin.as_mut() {
+                        stdin.write_all(path_str.as_bytes())?;
+                    }
+                    child.wait()
+                });
 
             match result {
                 Ok(_) => {
@@ -641,5 +661,115 @@ mod tests {
         assert!(!app.should_quit);
         app.quit();
         assert!(app.should_quit);
+    }
+
+    #[test]
+    fn test_search_input_length_limit() {
+        let (mut app, _temp) = create_test_app();
+
+        // 1000文字まで入力できることを確認
+        for _ in 0..1000 {
+            app.search_input_char('a');
+        }
+        assert_eq!(app.search_input.len(), 1000);
+
+        // 1001文字目は追加されないことを確認
+        app.search_input_char('b');
+        assert_eq!(app.search_input.len(), 1000);
+        assert!(!app.search_input.contains('b'));
+    }
+
+    #[test]
+    fn test_execute_search_updates_state() {
+        let (mut app, temp) = create_test_app();
+
+        // 検索入力を設定（-d と -b オプション付き）
+        let search_dir = temp.path().to_string_lossy().to_string();
+        app.search_input = format!("test -d -b {}", search_dir);
+
+        // 初期状態を確認
+        assert!(!app.search_dirs_only);
+
+        // 検索を実行
+        app.execute_search();
+
+        // 状態が更新されていることを確認
+        assert!(app.search_dirs_only);
+        assert_eq!(app.base_dir, temp.path().to_path_buf());
+        assert_eq!(app.input_mode, InputMode::Searching);
+    }
+
+    #[test]
+    fn test_execute_search_uses_current_dir_as_default_base() {
+        let (mut app, _temp) = create_test_app();
+
+        app.search_input = "test".to_string();
+
+        // -b オプションなしで検索実行
+        app.execute_search();
+
+        // base_dirはbrowserのcurrent_dirになる
+        assert_eq!(app.base_dir, app.browser.current_dir);
+    }
+
+    #[test]
+    fn test_confirm_search_result_with_hidden_file() {
+        use std::fs::File;
+
+        let temp_dir = TempDir::new().unwrap();
+        let hidden_file = temp_dir.path().join(".hidden_file");
+        File::create(&hidden_file).unwrap();
+
+        let config = Config::default(); // show_hidden = false
+        let mut app = App::new(temp_dir.path(), config);
+
+        // 隠しファイルを検索結果としてセット
+        app.search_results = vec![SearchResult {
+            path: hidden_file.clone(),
+            display_path: ".hidden_file".to_string(),
+            score: 100,
+            is_dir: false,
+        }];
+        app.search_selected = 0;
+        app.input_mode = InputMode::SearchResult;
+
+        // 検索結果を確定
+        app.confirm_search_result();
+
+        // 隠しファイルが正しく選択されていることを確認
+        assert_eq!(app.input_mode, InputMode::Preview);
+        let selected = app.browser.selected_entry();
+        assert!(selected.is_some());
+        assert_eq!(selected.unwrap().name, ".hidden_file");
+    }
+
+    #[test]
+    fn test_confirm_search_result_with_hidden_directory() {
+        use std::fs;
+
+        let temp_dir = TempDir::new().unwrap();
+        let hidden_dir = temp_dir.path().join(".hidden_dir");
+        fs::create_dir(&hidden_dir).unwrap();
+
+        let config = Config::default(); // show_hidden = false
+        let mut app = App::new(temp_dir.path(), config);
+
+        // 隠しディレクトリを検索結果としてセット
+        app.search_results = vec![SearchResult {
+            path: hidden_dir.clone(),
+            display_path: ".hidden_dir".to_string(),
+            score: 100,
+            is_dir: true,
+        }];
+        app.search_selected = 0;
+        app.input_mode = InputMode::SearchResult;
+
+        // 検索結果を確定
+        app.confirm_search_result();
+
+        // 隠しディレクトリに移動していることを確認
+        assert_eq!(app.input_mode, InputMode::Normal);
+        // パスの正規化を考慮して比較（/private/var vs /var など）
+        assert!(app.browser.current_dir.ends_with(".hidden_dir"));
     }
 }
