@@ -8,6 +8,8 @@ AIとペアプロしてる最中に、ちょっとファイルを確認したい
 ![Rust](https://img.shields.io/badge/rust-1.85%2B-orange)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
+https://github.com/user-attachments/assets/e3ec4515-ac0d-453f-851f-ca449b19e877
+
 ## なぜ vfv？
 
 - **設定不要のファジー検索** - [nucleo](https://github.com/helix-editor/nucleo)（Helixエディタと同じ）内蔵。fzfの設定不要。
