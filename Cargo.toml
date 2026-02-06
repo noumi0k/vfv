@@ -1,6 +1,6 @@
 [package]
 name = "vfv"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 description = "A fast terminal file viewer with fuzzy search and syntax highlighting"
 authors = ["noumi0k"]
