@@ -1,13 +1,12 @@
 # cargo-release configuration
 # https://github.com/crate-ci/cargo-release
 
-[workspace]
 allow-branch = ["main"]
 sign-commit = false
 sign-tag = false
 publish = false  # GitHub Actionsでcrates.io公開するため
 
-pre-release-commit-message = "Release {{version}}"
+pre-release-commit-message = "chore: release {{version}}"
 tag-message = "Release {{version}}"
 tag-name = "v{{version}}"
 
